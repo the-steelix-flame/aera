@@ -20,7 +20,7 @@ export default function Dashboard() {
     try {
       const startRes = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${startLoc}`);
       const endRes = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${endLoc}`);
-      
+
       if (startRes.data.length > 0 && endRes.data.length > 0) {
         const start = [parseFloat(startRes.data[0].lat), parseFloat(startRes.data[0].lon)];
         const end = [parseFloat(endRes.data[0].lat), parseFloat(endRes.data[0].lon)];
@@ -44,7 +44,7 @@ export default function Dashboard() {
             analyzedRoutes.push({ id: i, path: path, data: rData.data, isFastest: i === 0 });
           }
           setRoutes(analyzedRoutes);
-          setSelectedIndex(0); 
+          setSelectedIndex(0);
         }
       }
     } catch (error) {
@@ -66,7 +66,7 @@ export default function Dashboard() {
       </div>
 
       <div className="w-full max-w-[1400px] relative z-0 flex gap-4">
-        
+
         {/* LEFT PANEL */}
         <div className="w-[350px] flex flex-col gap-4 z-[1000]">
           <div className="bg-white p-5 rounded-2xl shadow-xl border border-gray-200">
@@ -78,7 +78,7 @@ export default function Dashboard() {
           </div>
 
           {routes.map((route, index) => (
-            <div 
+            <div
               key={index}
               onClick={() => setSelectedIndex(index)}
               className={`p-4 rounded-2xl shadow-md border cursor-pointer transition-all ${selectedIndex === index ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 transform scale-105' : 'bg-white border-gray-200 hover:bg-gray-50 opacity-80'}`}
@@ -90,7 +90,7 @@ export default function Dashboard() {
                 </span>
               </div>
               <p className="text-sm text-gray-600 mb-1">{route.data.health.distance} km • {route.data.health.duration} mins</p>
-              
+
               <div className="mt-3 p-2 bg-white/60 rounded text-xs text-gray-700 leading-snug border border-gray-100">
                 {route.data.reason}
               </div>
@@ -100,12 +100,12 @@ export default function Dashboard() {
 
         {/* CENTER MAP */}
         <div className="flex-1 relative">
-          <MapCanvas 
-            routes={routes} 
-            selectedIndex={selectedIndex} 
-            onRouteSelect={setSelectedIndex} 
-            startPoint={startCoords} 
-            endPoint={endCoords} 
+          <MapCanvas
+            routes={routes}
+            selectedIndex={selectedIndex}
+            onRouteSelect={setSelectedIndex}
+            startPoint={startCoords}
+            endPoint={endCoords}
             startName={startLoc} // 🛠️ Passing the exact text you typed
             endName={endLoc}     // 🛠️ Passing the exact text you typed
           />
@@ -114,7 +114,18 @@ export default function Dashboard() {
         {/* RIGHT PANEL: Drama & Data */}
         {activeRoute && activeRoute.data && (
           <div className="w-[340px] z-[1000] flex flex-col gap-4">
-            
+
+            {/* 🛠️ ADDED: Google Maps Button with Waypoint Forcing */}
+            <a
+              href={`https://www.google.com/maps/dir/?api=1&origin=${startCoords[0]},${startCoords[1]}&destination=${endCoords[0]},${endCoords[1]}&waypoints=${activeRoute.path[Math.floor(activeRoute.path.length / 2)][0]},${activeRoute.path[Math.floor(activeRoute.path.length / 2)][1]}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="w-full bg-gray-900 text-white font-bold py-3 px-4 rounded-2xl shadow-xl flex justify-center items-center gap-2 hover:bg-black transition-transform transform hover:scale-105"
+            >
+              <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z" /></svg>
+              Open in Google Maps
+            </a>
+
             <PollutionChart activeRouteData={activeRoute.data} />
 
             {activeRoute.data.medical_alert && (
