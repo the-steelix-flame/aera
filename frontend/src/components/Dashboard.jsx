@@ -1,99 +1,148 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import axios from 'axios';
 import MapCanvas from './MapCanvas';
+import PollutionChart from './PollutionChart';
 
 export default function Dashboard() {
-  const [healthWeight, setHealthWeight] = useState(70); 
-  const isHealthySelected = healthWeight > 50;
-  
-  // State to hold the live API data
-  const [liveAqi, setLiveAqi] = useState(null);
-  const [loading, setLoading] = useState(true);
+  const [startLoc, setStartLoc] = useState("Ruby, Kolkata");
+  const [endLoc, setEndLoc] = useState("Salt Lake, Kolkata");
+  const [isRouting, setIsRouting] = useState(false);
 
-  // Fetch the live data from Python when the dashboard loads
-  useEffect(() => {
-    const fetchLiveAqi = async () => {
-      try {
-        const response = await axios.get('http://127.0.0.1:8000/live-aqi');
-        if (response.data.status === "success") {
-          setLiveAqi(response.data);
+  const [startCoords, setStartCoords] = useState(null);
+  const [endCoords, setEndCoords] = useState(null);
+
+  const [routes, setRoutes] = useState([]);
+  const [selectedIndex, setSelectedIndex] = useState(0);
+
+  const calculateRealRoute = async () => {
+    if (!startLoc || !endLoc) return;
+    setIsRouting(true);
+    try {
+      const startRes = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${startLoc}`);
+      const endRes = await axios.get(`https://nominatim.openstreetmap.org/search?format=json&q=${endLoc}`);
+      
+      if (startRes.data.length > 0 && endRes.data.length > 0) {
+        const start = [parseFloat(startRes.data[0].lat), parseFloat(startRes.data[0].lon)];
+        const end = [parseFloat(endRes.data[0].lat), parseFloat(endRes.data[0].lon)];
+        setStartCoords(start);
+        setEndCoords(end);
+
+        const osrmUrl = `http://router.project-osrm.org/route/v1/driving/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson&alternatives=3`;
+        const routeRes = await axios.get(osrmUrl);
+        const osrmRoutes = routeRes.data.routes;
+
+        if (osrmRoutes && osrmRoutes.length > 0) {
+          const analyzedRoutes = [];
+          for (let i = 0; i < osrmRoutes.length; i++) {
+            const r = osrmRoutes[i];
+            const path = r.geometry.coordinates.map(c => [c[1], c[0]]);
+            const mid = path[Math.floor(path.length / 2)];
+            const time = Math.round(r.duration / 60);
+            const dist = (r.distance / 1000).toFixed(1);
+
+            const rData = await axios.get(`http://127.0.0.1:8000/analyze-route?lat=${mid[0]}&lng=${mid[1]}&duration_mins=${time}&distance_km=${dist}&route_type=${i}`);
+            analyzedRoutes.push({ id: i, path: path, data: rData.data, isFastest: i === 0 });
+          }
+          setRoutes(analyzedRoutes);
+          setSelectedIndex(0); 
         }
-      } catch (error) {
-        console.error("Error fetching live AQI:", error);
-      } finally {
-        setLoading(false);
       }
-    };
+    } catch (error) {
+      console.error("Routing Error:", error);
+    } finally {
+      setIsRouting(false);
+    }
+  };
 
-    fetchLiveAqi();
-  }, []);
+  const activeRoute = routes[selectedIndex];
 
   return (
-    <div className="min-h-screen pt-24 bg-gray-50 flex flex-col items-center px-6 pb-10">
-      
-      {/* Dashboard Header */}
-      <div className="w-full max-w-6xl mb-6 flex justify-between items-end">
+    <div className="min-h-screen pt-20 bg-gray-50 flex flex-col items-center px-4 pb-10">
+      <div className="w-full max-w-[1400px] mb-4 flex justify-between items-end">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900">Live Routing Console</h1>
-          <p className="text-gray-500 mt-1">Analyzing hyperlocal AQI and traffic data for Kolkata.</p>
-        </div>
-        
-        {/* 🔴 LIVE DATA BADGE IS HERE */}
-        <div className="bg-white px-4 py-2 rounded-xl shadow-sm border border-gray-200 flex items-center gap-3">
-          <div className="relative flex h-3 w-3">
-            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
-            <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500"></span>
-          </div>
-          <div className="text-sm font-bold text-gray-700">
-            {loading ? "Connecting to sensors..." : `Kolkata Live AQI: ${liveAqi?.live_aqi || 'Offline'}`}
-          </div>
+          <h1 className="text-3xl font-bold text-gray-900">AERA Traffic Distribution</h1>
+          <p className="text-gray-500 mt-1">Providing multiple real-time, biologically safe paths to prevent bottlenecks.</p>
         </div>
       </div>
 
-      {/* Main Map Container */}
-      <div className="w-full max-w-6xl relative z-0">
-        <MapCanvas isHealthySelected={isHealthySelected} />
+      <div className="w-full max-w-[1400px] relative z-0 flex gap-4">
         
-        {/* The Floating UI Panel */}
-        <div className="absolute top-6 left-6 z-[1000] w-80 bg-white/90 backdrop-blur-md p-6 rounded-2xl shadow-xl border border-gray-100">
-          <h2 className="font-bold text-gray-900 mb-4">Route Optimization</h2>
-          
-          <div className="mb-6">
-            <div className="flex justify-between text-xs font-bold text-gray-500 mb-2 uppercase tracking-wider">
-              <span>Speed</span>
-              <span>Health</span>
+        {/* LEFT PANEL */}
+        <div className="w-[350px] flex flex-col gap-4 z-[1000]">
+          <div className="bg-white p-5 rounded-2xl shadow-xl border border-gray-200">
+            <input type="text" value={startLoc} onChange={(e) => setStartLoc(e.target.value)} className="w-full mb-2 p-2 text-sm border rounded" placeholder="Start Location" />
+            <input type="text" value={endLoc} onChange={(e) => setEndLoc(e.target.value)} className="w-full mb-3 p-2 text-sm border rounded" placeholder="Destination" />
+            <button onClick={calculateRealRoute} disabled={isRouting} className="w-full bg-blue-600 text-white font-bold py-2 rounded-lg">
+              {isRouting ? "Scanning Satellites..." : "Find Alternatives"}
+            </button>
+          </div>
+
+          {routes.map((route, index) => (
+            <div 
+              key={index}
+              onClick={() => setSelectedIndex(index)}
+              className={`p-4 rounded-2xl shadow-md border cursor-pointer transition-all ${selectedIndex === index ? 'bg-blue-50 border-blue-500 ring-2 ring-blue-500 transform scale-105' : 'bg-white border-gray-200 hover:bg-gray-50 opacity-80'}`}
+            >
+              <div className="flex justify-between items-start mb-2">
+                <h3 className="font-bold text-gray-900">{route.isFastest ? "Fastest Route" : `Alternative ${index + 1}`}</h3>
+                <span className={`px-2 py-1 rounded text-xs font-bold ${route.data.aqi < 75 ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                  AQI: {route.data.aqi}
+                </span>
+              </div>
+              <p className="text-sm text-gray-600 mb-1">{route.data.health.distance} km • {route.data.health.duration} mins</p>
+              
+              <div className="mt-3 p-2 bg-white/60 rounded text-xs text-gray-700 leading-snug border border-gray-100">
+                {route.data.reason}
+              </div>
             </div>
-            <input 
-              type="range" 
-              min="0" 
-              max="100" 
-              value={healthWeight}
-              onChange={(e) => setHealthWeight(e.target.value)}
-              className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer accent-green-600"
-            />
-          </div>
-
-          {/* Dynamic Route Stats Card */}
-          <div className={`p-4 rounded-xl text-white transition-colors duration-300 ${isHealthySelected ? 'bg-green-600' : 'bg-red-500'}`}>
-            <h3 className="font-bold mb-2">
-              {isHealthySelected ? "Planet Protector Route 🌱" : "Fastest Route ⏱️"}
-            </h3>
-            <ul className="text-sm space-y-1 opacity-90">
-              <li><strong>Time:</strong> {isHealthySelected ? "32 mins" : "25 mins"}</li>
-              {/* Also showing the live AQI dynamically in the stats! */}
-              <li><strong>Route AQI:</strong> {isHealthySelected ? "95 (Filtered)" : `${liveAqi?.live_aqi || 180} (Live City Avg)`}</li>
-              {isHealthySelected && (
-                <>
-                  <li className="pt-2 border-t border-white/20 mt-2"><strong>CO2 Saved:</strong> 2.3 kg</li>
-                  <li><strong>Lungs Saved:</strong> 1.5 cigarettes</li>
-                </>
-              )}
-            </ul>
-          </div>
-
+          ))}
         </div>
-      </div>
 
+        {/* CENTER MAP */}
+        <div className="flex-1 relative">
+          <MapCanvas 
+            routes={routes} 
+            selectedIndex={selectedIndex} 
+            onRouteSelect={setSelectedIndex} 
+            startPoint={startCoords} 
+            endPoint={endCoords} 
+            startName={startLoc} // 🛠️ Passing the exact text you typed
+            endName={endLoc}     // 🛠️ Passing the exact text you typed
+          />
+        </div>
+
+        {/* RIGHT PANEL: Drama & Data */}
+        {activeRoute && activeRoute.data && (
+          <div className="w-[340px] z-[1000] flex flex-col gap-4">
+            
+            <PollutionChart activeRouteData={activeRoute.data} />
+
+            {activeRoute.data.medical_alert && (
+              <div className="bg-red-50 p-5 rounded-2xl shadow-xl border border-red-200 animate-fade-in">
+                <h3 className="font-bold text-red-700 mb-2 flex items-center gap-2"><span>🚨</span> TOXIC CORRIDOR</h3>
+                <p className="text-sm text-red-900 leading-relaxed font-medium">{activeRoute.data.medical_alert}</p>
+                <div className="mt-4 pt-4 border-t border-red-200">
+                  <span className="text-xs text-red-600 uppercase font-bold">Life Expectancy Impact</span>
+                  <div className="text-3xl font-black text-red-700">-{activeRoute.data.health.life_lost_mins} Mins</div>
+                </div>
+              </div>
+            )}
+
+            {activeRoute.data.reward_msg && (
+              <div className="bg-green-50 p-5 rounded-2xl shadow-xl border border-green-200 animate-fade-in">
+                <h3 className="font-bold text-green-700 mb-2 flex items-center gap-2"><span>🛡️</span> OPTIMAL HEALTH</h3>
+                <p className="text-sm text-green-900 leading-relaxed font-medium">{activeRoute.data.reward_msg}</p>
+                <div className="mt-4 pt-4 border-t border-green-200">
+                  <span className="text-xs text-green-600 uppercase font-bold">Health Restored</span>
+                  <div className="text-3xl font-black text-green-700">+0.0 Mins Lost</div>
+                </div>
+              </div>
+            )}
+
+          </div>
+        )}
+
+      </div>
     </div>
   );
 }
