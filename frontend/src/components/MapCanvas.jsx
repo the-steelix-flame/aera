@@ -108,7 +108,6 @@ export default function MapCanvas({ routes, selectedIndex, onRouteSelect, startP
 
         {/* 📍 AI MICRO-FACTOR MARKERS ON THE MAP */}
         {selectedRoute?.data?.micro_factors?.map((factor, idx) => {
-          // Find the exact midpoint of the route to place the marker
           const midPoint = selectedRoute.path[Math.floor(selectedRoute.path.length / 2)];
           
           let emoji = null;
